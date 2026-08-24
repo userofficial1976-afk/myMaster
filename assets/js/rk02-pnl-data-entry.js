@@ -332,184 +332,101 @@ async function muatPosKawalan() {
 
 
 // =====================================================
-// LOAD ANGGOTA
-// FILTER:
-// 1. UNIT
-// 2. POS KETUA POS
+// LOAD ANGGOTA + SORT IKUT PANGKAT + NO ANGGOTA
 // =====================================================
-
 async function muatAnggota() {
 
-    console.log(
-        "MULA LOAD ANGGOTA"
-    );
+    console.log("MULA LOAD ANGGOTA");
 
+    const unit = pengguna?.unit || "";
+    const jawatan = String(pengguna?.jawatan || "").toUpperCase();
+    const posKhidmat = pengguna?.poskhidmat || "";
 
-    // ===============================
-    // MAKLUMAT LOGIN
-    // ===============================
-
-    const unit =
-        pengguna?.unit || "";
-
-
-    const jawatan =
-        String(
-            pengguna?.jawatan || ""
-        ).toUpperCase();
-
-
-    const posKhidmat =
-        pengguna?.poskhidmat || "";
-
-
-    console.log(
-        "UNIT PENGGUNA:",
-        unit
-    );
-
-
-    console.log(
-        "JAWATAN:",
-        jawatan
-    );
-
-
-    console.log(
-        "POS KETUA POS:",
-        posKhidmat
-    );
-
-
-    // ===============================
-    // LOAD ANGGOTA
-    // ===============================
+    console.log("UNIT PENGGUNA:", unit);
+    console.log("JAWATAN:", jawatan);
+    console.log("POS KETUA POS:", posKhidmat);
 
     let query = supabaseClient
+       .from("Data_Anggota")
+       .select(`*`)
+       .eq("unit", unit);
 
-        .from("Data_Anggota")
-
-        .select(`
-            *
-        `)
-
-        .eq(
-            "unit",
-            unit
-        );
-
-
-    if (
-        jawatan.includes("KETUA POS")
-    ) {
-
-        query =
-            query.eq(
-                "poskhidmat",
-                posKhidmat
-            );
-
+    if (jawatan.includes("KETUA POS")) {
+        query = query.eq("poskhidmat", posKhidmat);
     }
 
-
-    const {
-
-        data,
-
-        error
-
-    } = await query
-
-        .order(
-            "nama",
-            {
-                ascending: true
-            }
-        );
-
+    const { data, error } = await query; // BUANG.order NAMA
 
     if (error) {
-
-        console.error(
-            "RALAT ANGGOTA",
-            error
-        );
-
+        console.error("RALAT ANGGOTA", error);
         return;
-
     }
 
+    dataAnggota = data || [];
 
-    dataAnggota =
-        data || [];
+    // =================================================
+    // SORT IKUT PANGKAT + NO ANGGOTA
+    // =================================================
+    const ORDER_PANGKAT = {
+        "SJN": 1,
+        "SJN ": 1,
+        "SARJAN": 1,
+        "KPL": 2,
+        "KOPERAL": 2,
+        "L/KPL": 3,
+        "LANS KOPERAL": 3,
+        "KONST": 4,
+        "KONSTABEL": 4,
+        "PPB": 5,
+        "PB": 5
+    };
 
+    dataAnggota.sort((a, b) => {
+        // 1. AMBIL PANGKAT DARI FIELD JAWATAN
+        const pangkatA = String(a.jawatan || "").toUpperCase().trim();
+        const pangkatB = String(b.jawatan || "").toUpperCase().trim();
 
-    console.log(
-        "JUMLAH ANGGOTA:",
-        dataAnggota.length
-    );
+        // 2. DAPATKAN NOMBOR ORDER
+        const orderA = ORDER_PANGKAT[pangkatA] || 99;
+        const orderB = ORDER_PANGKAT[pangkatB] || 99;
 
+        // 3. JIKA PANGKAT SAMA, SORT IKUT NO ANGGOTA
+        if (orderA === orderB) {
+            const noA = String(a.noskb || a.noanggota || "").trim();
+            const noB = String(b.noskb || b.noanggota || "").trim();
+            return noA.localeCompare(noB, undefined, { numeric: true }); // numeric: true untuk 123 < 1000
+        }
 
-    console.log(
-        "DATA ANGGOTA:",
-        dataAnggota
-    );
+        // 4. JIKA PANGKAT LAIN, IKUT ORDER
+        return orderA - orderB;
+    });
 
+    console.log("JUMLAH ANGGOTA:", dataAnggota.length);
+    console.log("DATA ANGGOTA DAH SORT:", dataAnggota);
 
     // ===============================
     // LOAD ORGANISASI UNIT
     // ===============================
-
-    const {
-
-        data: organisasi,
-
-        error: errOrganisasi
-
-    } = await supabaseClient
-
-        .from("Data_Anggota")
-
-        .select(`
-            nama,
-            jawatan,
-            unit
-        `)
-
-        .eq(
-            "unit",
-            unit
-        );
-
+    const { data: organisasi, error: errOrganisasi } = await supabaseClient
+       .from("Data_Anggota")
+       .select(`nama, jawatan, unit`)
+       .eq("unit", unit);
 
     if (errOrganisasi) {
-
-        console.error(
-            "RALAT ORGANISASI",
-            errOrganisasi
-        );
-
+        console.error("RALAT ORGANISASI", errOrganisasi);
     }
 
-
-    dataOrganisasi =
-        organisasi || [];
-
-
-    console.log(
-        "DATA ORGANISASI:",
-        dataOrganisasi
-    );
-
+    dataOrganisasi = organisasi || [];
 
     // ===============================
     // PAPAR MAKLUMAT
     // ===============================
-
     paparMaklumatKetua();
-
     kemasKiniMaklumatOperasi();
 
+    // PANGGIL PAPAR SELEPAS SORT
+    paparJadualRK02();
+    paparPosTampungan();
 }
 
 
